@@ -23,6 +23,7 @@ export async function handleAdminFlow(from, text, textLower, adminInfo, botProfe
     }
 
     const metadata = JSON.parse(session?.metadata || '{}');
+    const history = metadata.history || [];
 
     // 2.1 PAGINAÇÃO DA AGENDA
     if (session?.state === 'admin_viewing_agenda' && text === '8') {
@@ -45,10 +46,22 @@ export async function handleAdminFlow(from, text, textLower, adminInfo, botProfe
         const aiData = await runAgentChat(env, {
             prompt: promptEnriched,
             isAdmin: true,
-            professionalContext: professionalContext
+            professionalContext: professionalContext,
+            history: history
         });
 
         const aiMsg = aiData.text || "Chefe, não consegui processar isso agora. Pode me mandar a dúvida de novo?";
+
+        // Atualizar histórico (limitar a 6 mensagens para Admin, para dar espaço ao briefing)
+        const updatedHistory = [
+            ...history,
+            { role: 'user', content: text },
+            { role: 'assistant', content: aiMsg }
+        ].slice(-6);
+
+        metadata.history = updatedHistory;
+        await env.DB.prepare('UPDATE whatsapp_sessions SET metadata = ? WHERE phone = ?').bind(JSON.stringify(metadata), from).run();
+
         await sendMessage(env, from, aiMsg, botProfessionalEmail);
         return json({ success: true });
 
@@ -76,7 +89,8 @@ async function showAgenda(from, adminInfo, botProfessionalEmail, env, page = 1) 
         LIMIT ? OFFSET ?
     `).bind(adminInfo.email, todayStr, todayStr, timeStr, limit + 1, offset).all();
 
-    const metadata = { last_agenda_page: page };
+    const metadata = JSON.parse(session?.metadata || '{}');
+    metadata.last_agenda_page = page;
     await env.DB.prepare('UPDATE whatsapp_sessions SET metadata = ? WHERE phone = ?').bind(JSON.stringify(metadata), from).run();
 
     if (appts.results.length === 0 && page === 1) {

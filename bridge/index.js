@@ -24,7 +24,15 @@ const PORT = 3000;
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
-
+ 
+ // --- FILTRO DE RUÍDO NO TERMINAL ---
+ // Algumas dependências (como libsignal) usam console.info diretamente, ignorando o logger do pino.
+ const originalInfo = console.info;
+ console.info = function (...args) {
+     if (typeof args[0] === 'string' && args[0].includes('Closing session:')) return;
+     originalInfo.apply(console, args);
+ };
+ 
 const sessions = new Map();
 const sessionTimers = new Map();
 
@@ -52,7 +60,7 @@ async function connectToWhatsApp(emailRaw) {
 
     const sock = makeWASocket({
         version,
-        logger: pino({ level: 'error' }),
+        logger: pino({ level: 'silent' }),
         auth: state,
         browser: ['Universal App', 'Chrome', '1.0.0'],
         markOnlineOnConnect: true
@@ -90,9 +98,16 @@ async function connectToWhatsApp(emailRaw) {
 
         if (text) {
             // Se tiver remoteJidAlt (que geralmente é o número real), usamos ele como remetente no backend
-            const effectiveRemoteJid = (remoteJid.includes('@lid') && altJid) ? altJid : remoteJid;
-            const sender = isSelfChat ? `${myNumber}@s.whatsapp.net` : effectiveRemoteJid;
-            let cleanPhone = sender.replace(/\D/g, "");
+            let sender = remoteJid;
+            if (remoteJid.includes('@lid') && altJid) {
+                sender = altJid;
+            }
+            
+            if (isSelfChat) {
+                sender = `${myNumber}@s.whatsapp.net`;
+            }
+
+            let cleanPhone = sender.split('@')[0].split(':')[0].replace(/\D/g, "");
 
             if (cleanPhone.startsWith("55") && cleanPhone.length > 10) {
                 cleanPhone = cleanPhone.substring(2);
@@ -102,7 +117,7 @@ async function connectToWhatsApp(emailRaw) {
 
             axios.post(WORKER_URL, {
                 phone: cleanPhone,
-                jid: remoteJid,
+                jid: sender, // Enviar o JID normalizado (PN se possível)
                 message: text,
                 professional_email: email,
                 is_self_chat: isSelfChat

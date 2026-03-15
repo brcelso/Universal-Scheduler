@@ -61,6 +61,7 @@ export async function handleClientFlow(from, text, textLower, session, userInDb,
             establishmentName: professional?.shop_name || professional?.name || 'Estabelecimento',
             professionalEmail: professionalEmail,
             business_type: professional?.business_type || 'default',
+            professionalName: professional?.name || 'Profissional',
             bName: professional?.bot_name || 'Leo',
             bTone: professional?.bot_tone || 'amigável',
             servicesList: services.results.map(s => {
@@ -69,14 +70,29 @@ export async function handleClientFlow(from, text, textLower, session, userInDb,
             }).join('\n')
         };
 
+        const metadata = JSON.parse(session?.metadata || '{}');
+        const history = metadata.history || [];
+
         const aiData = await runAgentChat(env, {
             prompt: text,
             userEmail: userInDb?.email || session?.user_email || 'guest',
             isAdmin: false,
-            professionalContext: professionalContext
+            professionalContext: professionalContext,
+            history: history
         });
 
         const aiMsg = aiData.text || "Ops, tive um probleminha aqui. Pode perguntar de novo?";
+        
+        // Atualizar histórico (limitar a 10 mensagens)
+        const updatedHistory = [
+            ...history,
+            { role: 'user', content: text },
+            { role: 'assistant', content: aiMsg }
+        ].slice(-10);
+
+        metadata.history = updatedHistory;
+        await env.DB.prepare('UPDATE whatsapp_sessions SET metadata = ? WHERE phone = ?').bind(JSON.stringify(metadata), from).run();
+
         await sendMessage(env, from, aiMsg, botProfessionalEmail);
         return json({ success: true, aiResponse: aiMsg, debug: aiData, branch: "ai" });
 

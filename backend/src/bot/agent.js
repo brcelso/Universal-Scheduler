@@ -157,8 +157,7 @@ export const BUSINESS_TOOLS = [
     }
 ];
 
-export async function runAgentChat(env, { prompt, userEmail, isAdmin, professionalContext }) {
-
+export async function runAgentChat(env, { prompt, userEmail, isAdmin, professionalContext, history = [] }) {
     // 🛡️ ESCUDO ANTI-STATUS
     if (!prompt || String(prompt).trim() === '' || String(prompt) === 'undefined') {
         return { text: "" };
@@ -242,6 +241,7 @@ export async function runAgentChat(env, { prompt, userEmail, isAdmin, profession
 
     const messages = [
         { role: 'system', content: String(systemPrompt) },
+        ...history,
         { role: 'user', content: userMessageContent }
     ];
 

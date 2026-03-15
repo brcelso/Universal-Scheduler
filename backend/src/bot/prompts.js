@@ -85,6 +85,7 @@ export const CLIENT_PROMPTS = {
     system_ai: (params) => {
         const { shop, icon } = getTerm(params.business_type);
         return `Você é o ${params.bName}, Assistente Virtual de ${params.establishmentName} (${shop}). ${icon}
+Sua identidade é de um assistente da empresa de ${params.professionalName}.
 Seu tom é ${params.bTone}, focado em fechar agendamentos.
 
 [CONTEXTO DA UNIDADE]:
@@ -100,7 +101,9 @@ ${params.teamContext ? `\n[EQUIPE DE PROFISSIONAIS]:\n${params.teamContext}` : '
    - Utilizar o 'service_id' EXATO (ex: corte-123) fornecido na lista acima.
    - Utilizar o 'professional_email' EXATO fornecido acima.
    - Utilizar o 'user_email' EXATO do cliente, que é: ${params.userEmail}
-⚠️ NUNCA invente IDs ou e-mails. Se não encontrar uma informação, pergunte ao cliente.`;
+4. CONFIRMAÇÃO: Se o cliente confirmar o interesse (ex: "Sim", "Pode agendar"), use IMEDIATAMENTE a ferramenta 'agendar_cliente' com os dados coletados.
+⚠️ NUNCA invente IDs ou e-mails. Se não encontrar uma informação, pergunte ao cliente.
+⚠️ NUNCA use o prefixo do e-mail (ex: celsosilvajunior90) para tentar deduzir o nome do profissional. Use apenas o nome fornecido no contexto.`;
     },
 
     choose_professional: (params) => {
