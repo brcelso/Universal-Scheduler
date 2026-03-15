@@ -1,7 +1,10 @@
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
+
+// Carregar variáveis do .env na raiz do projeto
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 const API_URL = 'https://barber-server.celsosilvajunior90.workers.dev/api';
 const ADMIN_EMAIL = 'celsosilvajunior90@gmail.com'; // Admin fixo para licenciamento
@@ -27,8 +30,17 @@ function startNgrok() {
     return new Promise((resolve) => {
         console.log('🌐 Iniciando Túnel Ngrok...');
 
-        // Usar exec para evitar problemas de PATH e avisos de shell no Windows
-        ngrokProcess = exec('ngrok http 3000');
+        // Usar spawn para melhor controle de stream e logs
+        const authtoken = process.env.NGROK_AUTHTOKEN;
+        const args = ['http', '3000'];
+        if (authtoken) {
+            args.push('--authtoken', authtoken);
+        }
+
+        ngrokProcess = spawn('C:\\Users\\celso\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Ngrok.Ngrok_Microsoft.WinGet.Source_8wekyb3d8bbwe\\ngrok.exe', args);
+
+        ngrokProcess.stdout.on('data', (data) => console.log(`[Ngrok] ${data.toString().trim()}`));
+        ngrokProcess.stderr.on('data', (data) => console.error(`[Ngrok Error] ${data.toString().trim()}`));
 
         ngrokProcess.on('error', (err) => {
             console.error(`❌ Falha ao iniciar Ngrok:`, err.message);
@@ -52,7 +64,7 @@ function startNgrok() {
 
 async function startWhatsApp() {
     console.log('📱 Iniciando Ponte WhatsApp...');
-    whatsappProcess = exec('node index.js', {
+    whatsappProcess = exec('"C:\\Program Files\\nodejs\\node.exe" index.js', {
         env: { ...process.env, ADMIN_EMAIL: ADMIN_EMAIL }
     });
 
