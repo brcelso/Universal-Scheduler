@@ -51,8 +51,11 @@ export const sendMessage = async (env, phone, message, providerEmail, bridgeUrlO
         return;
     }
 
-    const cleanPhone = phone.replace(/\D/g, "");
-    const finalPhone = cleanPhone.length <= 11 ? `55${cleanPhone}` : cleanPhone;
+    let finalPhone = phone;
+    if (!phone.includes('@')) {
+        const cleanPhone = phone.replace(/\D/g, "");
+        finalPhone = cleanPhone.length <= 11 ? `55${cleanPhone}` : cleanPhone;
+    }
 
     try {
         await fetch(`${BRIDGE_URL}/send-message`, {
