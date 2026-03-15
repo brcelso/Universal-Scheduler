@@ -52,7 +52,7 @@ async function connectToWhatsApp(emailRaw) {
 
     const sock = makeWASocket({
         version,
-        logger: pino({ level: 'info' }),
+        logger: pino({ level: 'error' }),
         auth: state,
         browser: ['Universal App', 'Chrome', '1.0.0'],
         markOnlineOnConnect: true
@@ -68,11 +68,16 @@ async function connectToWhatsApp(emailRaw) {
         if (!msg.message || msg.message.protocolMessage || msg.message.historySyncNotification) return;
 
         const remoteJid = msg.key.remoteJid || '';
+        const altJid = msg.key.remoteJidAlt || ''; // Campo alternativo para LIDs
         const rawMyId = sock.user?.id || '';
         const myNumber = rawMyId.split(':')[0].split('@')[0];
+        const myLid = sock.user?.lid || '';
+        const cleanMyLid = myLid.split(':')[0].split('@')[0];
 
         // 1. Identifica se é Self-Chat
-        const isSelfChat = myNumber && remoteJid.includes(myNumber) || remoteJid.includes('@lid');
+        const isSelfChat = (myNumber && (remoteJid.includes(myNumber) || altJid.includes(myNumber))) || 
+                           (cleanMyLid && remoteJid.includes(cleanMyLid)) ||
+                           (remoteJid.includes('@lid') && msg.key.fromMe);
         const fromMe = msg.key.fromMe;
 
         // 2. Trava de segurança
@@ -84,7 +89,9 @@ async function connectToWhatsApp(emailRaw) {
             msg.message?.listResponseMessage?.singleSelectReply?.selectedRowId;
 
         if (text) {
-            const sender = isSelfChat ? `${myNumber}@s.whatsapp.net` : remoteJid;
+            // Se tiver remoteJidAlt (que geralmente é o número real), usamos ele como remetente no backend
+            const effectiveRemoteJid = (remoteJid.includes('@lid') && altJid) ? altJid : remoteJid;
+            const sender = isSelfChat ? `${myNumber}@s.whatsapp.net` : effectiveRemoteJid;
             let cleanPhone = sender.replace(/\D/g, "");
 
             if (cleanPhone.startsWith("55") && cleanPhone.length > 10) {
@@ -95,10 +102,13 @@ async function connectToWhatsApp(emailRaw) {
 
             axios.post(WORKER_URL, {
                 phone: cleanPhone,
+                jid: remoteJid,
                 message: text,
                 professional_email: email,
                 is_self_chat: isSelfChat
-            }).catch(() => { });
+            }).catch((err) => { 
+                console.error(`[Bridge] ❌ Erro ao enviar para o Worker:`, err.message);
+            });
         }
     });
 
@@ -224,9 +234,12 @@ app.post('/send-message', async (req, res) => {
     if (!sock) return res.status(503).json({ error: 'WhatsApp não conectado' });
 
     try {
-        let cleanNumber = number.replace(/\D/g, '');
-        if (!cleanNumber.startsWith('55')) cleanNumber = '55' + cleanNumber;
-        const jid = `${cleanNumber}@s.whatsapp.net`;
+        let jid = number;
+        if (!number.includes('@')) {
+            let cleanNumber = number.replace(/\D/g, '');
+            if (!cleanNumber.startsWith('55')) cleanNumber = '55' + cleanNumber;
+            jid = `${cleanNumber}@s.whatsapp.net`;
+        }
 
         fs.appendFileSync('bridge_logs.txt', `[${new Date().toISOString()}] Checking WhatsApp for ${jid}\n`);
         const [result] = await sock.onWhatsApp(jid);
