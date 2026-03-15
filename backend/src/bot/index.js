@@ -18,16 +18,19 @@ export async function handleWhatsAppWebhook(request, env) {
     const cleanFrom = from.replace(/\D/g, "");
     const last8 = cleanFrom.slice(-8);
     const ddd = cleanFrom.length >= 10 ? cleanFrom.slice(-11, -9) : "";
-
     // 1. Identificar o Usuário no Banco (Quem está falando?)
-    // Busca por um usuário que tenha esse telefone (Admin ou Profissional)
-    let senderInfo = await env.DB.prepare(
-        'SELECT * FROM users WHERE phone LIKE ? AND (is_admin = 1 OR is_barber = 1)'
-    ).bind(`%${ddd}%${last8}`).first();
+    let senderInfo = null;
 
-    // Se é Self-Chat e não achou pelo telefone, usa o dono da sessão (botProfessionalEmail)
-    if (!senderInfo && (isSelfChat || cleanFrom.includes('983637172')) && botProfessionalEmail) {
+    // Se é Self-Chat, o remetente é o dono do bot (o admin)
+    if (isSelfChat && botProfessionalEmail) {
         senderInfo = await env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(botProfessionalEmail).first();
+    }
+    
+    // Fallback: Busca por um usuário que tenha esse telefone (Admin ou Profissional) caso não seja self-chat ou não achou o dono
+    if (!senderInfo) {
+        senderInfo = await env.DB.prepare(
+            'SELECT * FROM users WHERE phone LIKE ? AND (is_admin = 1 OR is_barber = 1)'
+        ).bind(`%${ddd}%${last8}`).first();
     }
 
     // Se ainda assim não achou o Celso (Master)

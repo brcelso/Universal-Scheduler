@@ -72,7 +72,7 @@ async function connectToWhatsApp(emailRaw) {
         const myNumber = rawMyId.split(':')[0].split('@')[0];
 
         // 1. Identifica se é Self-Chat
-        const isSelfChat = remoteJid.includes(myNumber) || remoteJid.includes('@lid');
+        const isSelfChat = myNumber && remoteJid.includes(myNumber) || remoteJid.includes('@lid');
         const fromMe = msg.key.fromMe;
 
         // 2. Trava de segurança
