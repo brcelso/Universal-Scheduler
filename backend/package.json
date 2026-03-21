@@ -1,0 +1,9 @@
+{
+  "name": "universal-scheduler-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "wrangler": "^4.76.0"
+  }
+}

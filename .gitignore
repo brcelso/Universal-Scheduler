@@ -26,6 +26,7 @@ dist-ssr
 # Cloudflare
 backend/.wrangler
 backend/node_modules
+backend/.env
 
 # Environment
 .env

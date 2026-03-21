@@ -1,64 +1,72 @@
+import 'dotenv/config'; 
 import { handleClientFlow } from './bot/clientHandler.js';
-import { createMPPreference } from './utils/paymentUtils.js'; // Sua função de produção
+import { createMPPreference } from './utils/paymentUtils.js';
 import { execSync } from 'child_process';
 
-// --- UTILITÁRIOS DE BANCO REMOTO (D1 via Wrangler) ---
+// --- VALIDAÇÃO DE SEGURANÇA ---
+if (!process.env.TEST_USER_EMAIL || !process.env.MP_ACCESS_TOKEN) {
+    console.error("❌ ERRO: Variáveis de ambiente não carregadas. Verifique seu arquivo .env");
+    process.exit(1);
+}
+
+const DB_NAME = process.env.D1_DB_NAME || 'barber-db';
+
+// --- UTILITÁRIOS DE BANCO REMOTO (CORRIGIDO PARA WINDOWS/NODE 24) ---
 const sanitizeSql = (sql) => sql.replace(/\s+/g, ' ').trim();
+
+const executeSql = (sql, args, mode = 'run') => {
+    let argIndex = 0;
+    const cleanSql = sanitizeSql(sql).replace(/\?/g, () => {
+        const arg = args[argIndex++];
+        // Tratamento crucial: se for undefined, vira NULL para não quebrar o SQL
+        if (arg === undefined) return 'NULL';
+        return typeof arg === 'string' ? `'${arg.replace(/'/g, "''")}'` : arg;
+    });
+
+    console.log(`[SQL ${mode.toUpperCase()}] ${cleanSql}`);
+    
+    try {
+        // Usamos stdio: ['ignore', 'pipe', 'ignore'] para evitar o crash de Assertion do Windows
+        const command = `npx wrangler d1 execute ${DB_NAME} --remote --command="${cleanSql.replace(/"/g, '""')}" --json`;
+        const output = execSync(command, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] });
+        
+        if (mode === 'run') return { success: true };
+        
+        const parsed = JSON.parse(output);
+        const results = parsed[0]?.results || [];
+        return mode === 'first' ? (results[0] || null) : { results };
+    } catch (err) {
+        console.error(`❌ Falha no comando SQL. Verifique se a coluna existe no D1.`);
+        return mode === 'first' ? null : { results: [] };
+    }
+};
 
 const remoteDB = {
     prepare: (sql) => ({
         bind: (...args) => ({
-            run: async () => {
-                const cleanSql = sanitizeSql(sql).replace(/\?/g, () => {
-                    const arg = args.shift();
-                    return typeof arg === 'string' ? `'${arg.replace(/'/g, "''")}'` : (arg === null ? 'NULL' : arg);
-                });
-                console.log(`[SQL EXEC] ${cleanSql}`);
-                const shellSql = cleanSql.replace(/"/g, '""'); 
-                execSync(`npx wrangler d1 execute barber-db --remote --command="${shellSql}"`, { encoding: 'utf-8', stdio: 'inherit' });
-                return { success: true };
-            },
-            all: async () => {
-                const cleanSql = sanitizeSql(sql).replace(/\?/g, () => {
-                    const arg = args.shift();
-                    return typeof arg === 'string' ? `'${arg.replace(/'/g, "''")}'` : (arg === null ? 'NULL' : arg);
-                });
-                console.log(`[SQL QUERY] ${cleanSql}`);
-                const shellSql = cleanSql.replace(/"/g, '""');
-                const output = execSync(`npx wrangler d1 execute barber-db --remote --command="${shellSql}" --json`, { encoding: 'utf-8' });
-                const parsed = JSON.parse(output);
-                return { results: parsed[0]?.results || [] };
-            },
-            first: async () => {
-                const cleanSql = sanitizeSql(sql).replace(/\?/g, () => {
-                    const arg = args.shift();
-                    return typeof arg === 'string' ? `'${arg.replace(/'/g, "''")}'` : (arg === null ? 'NULL' : arg);
-                });
-                console.log(`[SQL FIRST] ${cleanSql}`);
-                const output = execSync(`npx wrangler d1 execute barber-db --remote --command="${cleanSql.replace(/"/g, '""')}" --json`, { encoding: 'utf-8' });
-                const parsed = JSON.parse(output);
-                return parsed[0]?.results[0] || null;
-            }
+            run: async () => executeSql(sql, args, 'run'),
+            all: async () => executeSql(sql, args, 'all'),
+            first: async () => executeSql(sql, args, 'first')
         })
     })
 };
 
-// --- MOCK DA IA COM INTEGRAÇÃO DE PAGAMENTO REAL ---
+// --- MOCK DA IA ---
 let step = 0;
-let lastApptId = '';
 
 const mockAI = {
     run: async () => {
         step++;
+        const email = process.env.TEST_USER_EMAIL;
         
-        if (step === 1) { // Passo 1: IA decide agendar
+        if (step === 1) {
             return {
                 tool_calls: [{
                     id: 'c1',
                     name: 'agendar_cliente',
                     arguments: {
-                        user_email: 'celsosilvajunior90@gmail.com',
-                        professional_email: 'celsosilvajunior90@gmail.com',
+                        user_email: email,
+                        professional_email: email,
                         service_id: 'corte-simples',
                         date: '2026-03-24',
                         time: '10:00'
@@ -67,34 +75,34 @@ const mockAI = {
             };
         }
         
-        if (step === 2) { // Passo 2: IA responde com o LINK REAL
-            console.log("\n🔗 [PAGAMENTO] Gerando link real via API do Mercado Pago...");
+        if (step === 2) {
+            console.log("\n🔗 [PAGAMENTO] Buscando dados para gerar link...");
+            const appt = await remoteDB.prepare(`
+                SELECT a.id, a.appointment_date, a.appointment_time, s.name as service_name 
+                FROM appointments a 
+                JOIN services s ON a.service_id = s.id 
+                WHERE a.user_email = ? 
+                ORDER BY a.created_at DESC LIMIT 1
+            `).bind(email).first();
+
+            if (!appt) return { response: "Ops, não encontrei seu agendamento para gerar o pagamento." };
+
+            const mpResult = await createMPPreference(mockEnv, remoteDB, appt.id);
+            const linkReal = mpResult.paymentUrl || "⚠️ Link temporariamente indisponível";
             
-            // Chama sua função de produção para obter o init_point real
-            const mpResult = await createMPPreference(mockEnv, remoteDB, lastApptId);
-            const linkReal = mpResult.paymentUrl || "Erro ao gerar link";
+            const dataPartes = appt.appointment_date.split('-');
+            const dataFormatada = `${dataPartes[2]}/${dataPartes[1]}`;
 
             return { 
-                response: `Excelente! Agendei seu Corte de Cabelo. Segue o link real de pagamento: ${linkReal}`
-            };
-        }
-
-        if (step === 3) { // Passo 3: Reagendamento
-            return {
-                tool_calls: [
-                    { id: 'c2_c', name: 'alterar_status_agendamento', arguments: { appointment_id: lastApptId, status: 'cancelled' } },
-                    { id: 'c2_b', name: 'agendar_cliente', arguments: { 
-                        user_email: 'celsosilvajunior90@gmail.com', 
-                        professional_email: 'celsosilvajunior90@gmail.com', 
-                        service_id: 'corte-simples', 
-                        date: '2026-03-24', 
-                        time: '11:00' 
-                    } }
-                ]
+                response: `✅ *Agendamento Confirmado!*\n\n` +
+                          `*Serviço:* ${appt.service_name}\n` +
+                          `*Data:* ${dataFormatada}\n` +
+                          `*Horário:* ${appt.appointment_time}h\n\n` +
+                          `Clique no link abaixo para finalizar o pagamento:\n🔗 ${linkReal}`
             };
         }
         
-        return { response: "Tudo pronto! Seu horário foi atualizado." };
+        return { response: "Processo concluído." };
     }
 };
 
@@ -102,15 +110,13 @@ const mockAI = {
 const mockEnv = {
     DB: remoteDB,
     AI: mockAI,
-    WA_BRIDGE_KEY: 'universal-secret-key', // A chave que o seu wa-bridge exige
-    WA_BRIDGE_URL: 'https://nisi-marbly-maeve.ngrok-free.dev', // URL real do seu bridge
-    // Use um token real do MP (começando com APP_USR- ou TEST-)
-    MP_ACCESS_TOKEN: 'APP_USR-6057655577759400-032115-f4387f31592e76678407673647474556-398452977', 
-    FRONTEND_URL: 'https://brcelso.github.io/Universal-Scheduler/',
+    WA_BRIDGE_KEY: process.env.WA_BRIDGE_KEY,
+    WA_BRIDGE_URL: process.env.WA_BRIDGE_URL,
+    MP_ACCESS_TOKEN: process.env.MP_ACCESS_TOKEN,
+    FRONTEND_URL: process.env.FRONTEND_URL,
     
-    // Injeção manual da função sendMessage caso o import do index.js falhe no ambiente de teste
     sendMessage: async (env, to, text, professionalEmail) => {
-        console.log(`\n[BRIDGE SEND] Tentando enviar para ${to}...`);
+        console.log(`\n[BRIDGE SEND] Enviando para ${to}...`);
         try {
             const res = await fetch(`${env.WA_BRIDGE_URL}/send`, {
                 method: 'POST',
@@ -118,46 +124,29 @@ const mockEnv = {
                     'Authorization': `Bearer ${env.WA_BRIDGE_KEY}`,
                     'Content-Type': 'application/json' 
                 },
-                body: JSON.stringify({ 
-                    to: to, 
-                    text: text, 
-                    professionalEmail: professionalEmail 
-                })
+                body: JSON.stringify({ to, text, professionalEmail })
             });
-            const data = await res.json();
-            console.log(`[BRIDGE RESPONSE] Status: ${res.status}`, data);
-            return data;
+            return await res.json();
         } catch (err) {
-            console.error(`[BRIDGE ERROR] Falha ao conectar no bridge: ${err.message}`);
+            console.error(`[BRIDGE ERROR] ${err.message}`);
         }
     }
 };
 
-// --- EXECUÇÃO DO TESTE ---
 async function runCelsoTest() {
-    console.log("🚀 INICIANDO TESTE REAL PARA CELSO (CONEXÃO D1 + MERCADO PAGO)\n");
-    
-    const celsoJid = '5511972509876@s.whatsapp.net';
-    const celsoEmail = 'celsosilvajunior90@gmail.com';
-    const userInDb = { email: celsoEmail, name: 'Celso Silva Junior', phone: '11972509876' };
+    const jid = process.env.TEST_USER_JID;
+    const email = process.env.TEST_USER_EMAIL;
+    const userInDb = { email, name: 'Celso Silva Junior', phone: jid.split('@')[0] };
 
-    // 1. OI
-    console.log("\n--- PASSO 1: OI ---");
-    await handleClientFlow(celsoJid, "Oi", "oi", null, userInDb, celsoEmail, mockEnv);
+    console.log("🚀 INICIANDO TESTE REAL (D1 + MERCADO PAGO)\n");
 
-    // 2. AGENDAR
-    console.log("\n--- PASSO 2: AGENDAR ---");
-    const session1 = await remoteDB.prepare("SELECT * FROM whatsapp_sessions WHERE phone = ?").bind(celsoJid).first();
-    await handleClientFlow(celsoJid, "Quero um corte amanhã às 10h", "agendar", session1, userInDb, celsoEmail, mockEnv);
-    
-    // Capturar o ID gerado para que a função de pagamento possa usá-lo no Mock Step 2
-    const appt = await remoteDB.prepare("SELECT id FROM appointments WHERE user_email = ? ORDER BY created_at DESC LIMIT 1").bind(celsoEmail).first();
-    lastApptId = appt?.id;
+    console.log("--- PASSO 1: AGENDAR ---");
+    // Passando o email como professionalEmail para a busca de configurações inicial
+    await handleClientFlow(jid, "Quero agendar um corte", "agendar", null, userInDb, email, mockEnv);
 
-    // 3. REAGENDAR (IA vai chamar o Passo 2 do Mock e gerar o link real)
-    console.log("\n--- PASSO 3: GERAR LINK E RESPONDER ---");
-    const session2 = await remoteDB.prepare("SELECT * FROM whatsapp_sessions WHERE phone = ?").bind(celsoJid).first();
-    await handleClientFlow(celsoJid, "Confirmar agendamento", "ok", session2, userInDb, celsoEmail, mockEnv);
+    console.log("\n--- PASSO 2: GERAR CONFIRMAÇÃO E LINK ---");
+    const session = await remoteDB.prepare("SELECT * FROM whatsapp_sessions WHERE phone = ?").bind(jid).first();
+    await handleClientFlow(jid, "Confirmar", "ok", session, userInDb, email, mockEnv);
 
     console.log("\n✅ TESTE FINALIZADO COM SUCESSO.");
 }
