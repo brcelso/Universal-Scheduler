@@ -2,6 +2,7 @@
  * Tool Actions - Business Agnostic Version
  * Encapsula a lógica de banco de dados e integrações das ferramentas de forma genérica.
  */
+import { isValidAppointmentTime, isPastDateTime } from '../utils/time.js';
 
 export const TOOL_ACTIONS = {
     async consultar_agenda({ args, DB, emailReal }) {
@@ -18,11 +19,29 @@ export const TOOL_ACTIONS = {
             const dayOfWeek = dateObj.getDay();
             const avail = await DB.prepare("SELECT start_time, end_time FROM availability WHERE barber_email = ? AND day_of_week = ?").bind(targetEmail, dayOfWeek).first();
 
+            const records = res.results || [];
+            
+            // FILTRAR SLOTS PASSADOS SE FOR HOJE
+            const agora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+            const hoje = agora.toISOString().split('T')[0];
+            
+            if (appointment_date === hoje) {
+                const totalMinutesNow = agora.getHours() * 60 + agora.getMinutes();
+                for (let min = 0; min <= totalMinutesNow; min += 30) {
+                    const hStr = Math.floor(min/60).toString().padStart(2, '0');
+                    const mStr = (min % 60).toString().padStart(2, '0');
+                    const tStr = `${hStr}:${mStr}`;
+                    if (!records.some(r => r.time === tStr)) {
+                        records.push({ time: tStr, status: 'busy', client_name: 'PASSADO', service_name: 'Indisponível' });
+                    }
+                }
+            }
+
             return {
                 status: "sucesso",
                 data: appointment_date,
                 horario_funcionamento: avail ? `${avail.start_time} às ${avail.end_time}` : "Fechado neste dia",
-                agendamentos_ocupados: res.results
+                agendamentos_ocupados: records
             };
         } catch (e) { return { status: "erro", msg: e.message }; }
     },
@@ -43,12 +62,24 @@ export const TOOL_ACTIONS = {
                 return { status: "erro", msg: `O serviço '${service_id}' não foi encontrado ou não pertence a este profissional.` };
             }
 
-            // 2. Validar se a data/hora não é no passado
-            const agora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-            const apptDate = new Date(`${date}T${time}:00`);
-            
-            if (apptDate < agora) {
+            // 2. Validar se a data/hora não é no passado e segue o intervalo de 30 min
+            if (!isValidAppointmentTime(time)) {
+                return { status: "erro", msg: "Horários devem seguir o intervalo de 30 minutos (ex: 08:00 ou 08:30)." };
+            }
+
+            if (isPastDateTime(date, time)) {
                 return { status: "erro", msg: "Não é possível realizar agendamentos em datas ou horários que já passaram." };
+            }
+
+            // 3. Verificar conflito de horário
+            const conflict = await DB.prepare(`
+                SELECT id FROM appointments 
+                WHERE barber_email = ? AND appointment_date = ? AND appointment_time = ? 
+                AND status IN ('pending', 'confirmed', 'blocked')
+            `).bind(targetEmail, date, time).first();
+
+            if (conflict) {
+                return { status: "erro", msg: "Este horário já está ocupado ou bloqueado. Por favor, escolha outro." };
             }
 
             // 3. Verificar se o profissional existe/é ativo

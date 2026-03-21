@@ -50,6 +50,7 @@ export async function handleAdminFlow(from, text, textLower, adminInfo, botProfe
         const aiData = await runAgentChat(env, {
             prompt: promptEnriched,
             isAdmin: true,
+            userEmail: adminInfo.email,
             professionalContext: professionalContext,
             history: history
         });

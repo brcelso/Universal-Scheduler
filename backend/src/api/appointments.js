@@ -1,5 +1,5 @@
 import { json } from '../utils/index.js';
-import { isValidAppointmentTime } from '../utils/time.js';
+import { isValidAppointmentTime, isPastDateTime } from '../utils/time.js';
 
 export async function handleAppointmentRoutes(url, request, env) {
     const { DB } = env;
@@ -47,6 +47,10 @@ export async function handleAppointmentRoutes(url, request, env) {
             return json({ error: 'Horários devem seguir o intervalo de 30 minutos (ex: 08:00 ou 08:30)' }, 400);
         }
 
+        if (isPastDateTime(date, time)) {
+            return json({ error: 'Não é possível agendar em datas ou horários passados' }, 400);
+        }
+
         const conflict = await DB.prepare(`
             SELECT id FROM appointments 
             WHERE barber_email = ? AND appointment_date = ? AND appointment_time = ? 
@@ -80,7 +84,30 @@ export async function handleAppointmentRoutes(url, request, env) {
         }
 
         const busy = await DB.prepare(query).bind(...params).all();
-        return json(busy.results);
+        let results = busy.results;
+
+        // SE FOR HOJE, ADICIONAR SLOTS QUE JÁ PASSARAM COMO BUSY
+        const agora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+        const hoje = agora.toISOString().split('T')[0];
+
+        if (date === hoje) {
+            const h = agora.getHours();
+            const m = agora.getMinutes();
+            const totalMinutesNow = h * 60 + m;
+
+            // Gerar slots de 30 em 30 min que já passaram e adicionar se não estiverem no banco
+            for (let min = 0; min <= totalMinutesNow; min += 30) {
+                const hourPart = Math.floor(min / 60).toString().padStart(2, '0');
+                const minPart = (min % 60).toString().padStart(2, '0');
+                const timeStr = `${hourPart}:${minPart}`;
+                
+                if (!results.some(r => r.time === timeStr)) {
+                    results.push({ time: timeStr, status: 'busy' });
+                }
+            }
+        }
+
+        return json(results);
     }
 
     // 4. CANCELAR AGENDAMENTO
@@ -145,6 +172,10 @@ export async function handleAppointmentRoutes(url, request, env) {
         // VALIDAÇÃO DE INTERVALO DE 30 MINUTOS
         if (!isValidAppointmentTime(time)) {
             return json({ error: 'Horários devem seguir o intervalo de 30 minutos (ex: 08:00 ou 08:30)' }, 400);
+        }
+
+        if (isPastDateTime(date, time)) {
+            return json({ error: 'Não é possível agendar em datas ou horários passados' }, 400);
         }
 
         const conflict = await DB.prepare(`

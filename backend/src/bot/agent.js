@@ -207,9 +207,9 @@ export async function runAgentChat(env, { prompt, userEmail, isAdmin, profession
 
     // 📝 SELEÇÃO DE PROMPT
     let systemPrompt = "";
-    if (role === 'master') systemPrompt = ADMIN_PROMPTS.system_master(professionalContext);
-    else if (role === 'owner') systemPrompt = ADMIN_PROMPTS.system_owner(professionalContext);
-    else if (role === 'staff') systemPrompt = ADMIN_PROMPTS.system_staff(professionalContext);
+    if (role === 'master') systemPrompt = ADMIN_PROMPTS.system_master({ ...professionalContext, userEmail: params.userEmail });
+    else if (role === 'owner') systemPrompt = ADMIN_PROMPTS.system_owner({ ...professionalContext, userEmail: params.userEmail });
+    else if (role === 'staff') systemPrompt = ADMIN_PROMPTS.system_staff({ ...professionalContext, userEmail: params.userEmail });
     else systemPrompt = CLIENT_PROMPTS.system_ai({ ...professionalContext, userEmail, dynamicContext });
 
     // 🕰️ CONTEXTO TEMPORAL (Crucial para não agendar no passado)
