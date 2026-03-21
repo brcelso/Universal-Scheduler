@@ -28,7 +28,7 @@ export async function handleAdminFlow(from, text, textLower, adminInfo, botProfe
     // 2.1 PAGINAÇÃO DA AGENDA
     if (session?.state === 'admin_viewing_agenda' && text === '8') {
         const lastPage = metadata.last_agenda_page || 1;
-        return await showAgenda(from, adminInfo, botProfessionalEmail, env, lastPage + 1);
+        return await showAgenda(from, adminInfo, botProfessionalEmail, env, lastPage + 1, session);
     }
 
     // 3. FLUXO AGÊNTICO
@@ -71,7 +71,7 @@ export async function handleAdminFlow(from, text, textLower, adminInfo, botProfe
     }
 }
 
-async function showAgenda(from, adminInfo, botProfessionalEmail, env, page = 1) {
+async function showAgenda(from, adminInfo, botProfessionalEmail, env, page = 1, session = null) {
     const limit = 8;
     const offset = (page - 1) * limit;
     const brazilTime = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));

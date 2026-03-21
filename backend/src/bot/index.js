@@ -19,7 +19,6 @@ export async function handleWhatsAppWebhook(request, env) {
     if (dbPhone.startsWith("55") && dbPhone.length > 10) dbPhone = dbPhone.substring(2);
 
     const last8 = dbPhone.slice(-8);
-    const ddd = dbPhone.length >= 10 ? dbPhone.slice(0, 2) : "";
 
     // 1. Identificar o Usuário no Banco (Quem está falando?)
     let senderInfo = null;
