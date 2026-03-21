@@ -120,11 +120,18 @@ export const BookingPage = ({
                         {/* Grid de Horários - LOGICA DE BLOQUEIO INTEGRADA */}
                         <div className="time-grid" style={{ marginTop: '2rem' }}>
                             {timeSlots.filter(time => {
-                                if (!isSameDay(selectedDate, new Date())) return true;
+                                if (!selectedDate || ! (new Date(selectedDate) instanceof Date)) return true;
+
+                                const now = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+                                const selDate = new Date(selectedDate);
+                                
+                                // Só filtra se for hoje (considerando apenas ano, mês, dia)
+                                if (selDate.getDate() !== now.getDate() || selDate.getMonth() !== now.getMonth() || selDate.getFullYear() !== now.getFullYear()) {
+                                    return true;
+                                }
 
                                 const [hours, minutes] = time.split(':').map(Number);
-                                const now = new Date();
-                                const slotTime = new Date();
+                                const slotTime = new Date(now);
                                 slotTime.setHours(hours, minutes, 0, 0);
 
                                 return slotTime > now;

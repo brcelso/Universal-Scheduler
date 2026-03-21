@@ -68,7 +68,23 @@ export const AgendaTab = ({
                     gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
                     gap: '8px'
                 }}>
-                    {timeSlots.map(time => {
+                    {timeSlots.filter(time => {
+                        if (!selectedDate || !new Date(selectedDate) || ! (new Date(selectedDate) instanceof Date)) return true;
+                        
+                        const now = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+                        const selDate = new Date(selectedDate);
+                        
+                        // Só filtra se for hoje
+                        if (selDate.getDate() !== now.getDate() || selDate.getMonth() !== now.getMonth() || selDate.getFullYear() !== now.getFullYear()) {
+                            return true;
+                        }
+
+                        const [hours, minutes] = time.split(':').map(Number);
+                        const slotTime = new Date(now);
+                        slotTime.setHours(hours, minutes, 0, 0);
+
+                        return slotTime > now;
+                    }).map(time => {
                         // Busca o dado de ocupação (suporta string ou objeto vindo do D1)
                         const slotData = busySlots && busySlots.find(s => {
                             const slotTime = typeof s === 'string' ? s : (s.time || s.appointment_time);
