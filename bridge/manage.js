@@ -37,7 +37,8 @@ function startNgrok() {
             args.push('--authtoken', authtoken);
         }
 
-        ngrokProcess = spawn('C:\\Users\\celso\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Ngrok.Ngrok_Microsoft.WinGet.Source_8wekyb3d8bbwe\\ngrok.exe', args);
+        const ngrokExe = process.env.NGROK_PATH || 'ngrok';
+        ngrokProcess = spawn(ngrokExe, args);
 
         ngrokProcess.stdout.on('data', (data) => console.log(`[Ngrok] ${data.toString().trim()}`));
         ngrokProcess.stderr.on('data', (data) => console.error(`[Ngrok Error] ${data.toString().trim()}`));
@@ -64,7 +65,8 @@ function startNgrok() {
 
 async function startWhatsApp() {
     console.log('📱 Iniciando Ponte WhatsApp...');
-    whatsappProcess = exec('"C:\\Program Files\\nodejs\\node.exe" index.js', {
+    const nodeExe = process.env.NODE_PATH || 'node';
+    whatsappProcess = exec(`"${nodeExe}" index.js`, {
         env: { ...process.env, ADMIN_EMAIL: ADMIN_EMAIL }
     });
 
