@@ -1,4 +1,5 @@
 import { json } from '../utils/index.js';
+import { createMPPreference } from '../utils/paymentUtils.js';
 
 export async function handlePaymentRoutes(url, request, env) {
     const { DB } = env;
@@ -50,52 +51,9 @@ export async function handlePaymentRoutes(url, request, env) {
     // Create Mercado Pago Preference for Appointment
     if (url.pathname === '/api/payments/create' && request.method === 'POST') {
         const { appointmentId } = await request.json();
-
-        const appt = await DB.prepare(`
-            SELECT a.*, s.name as service_name, s.price 
-            FROM appointments a 
-            JOIN services s ON a.service_id = s.id 
-            WHERE a.id = ?
-        `).bind(appointmentId).first();
-
-        if (!appt) return json({ error: 'Appointment not found' }, 404);
-
-        // Buscar Access Token do Profissional
-        const professional = await DB.prepare('SELECT mp_access_token FROM users WHERE email = ?').bind(appt.barber_email).first();
-        const accessToken = professional?.mp_access_token || env.MP_ACCESS_TOKEN;
-
-        try {
-            const mpPref = {
-                items: [{
-                    title: `Agendamento - ${appt.service_name}`,
-                    quantity: 1,
-                    unit_price: appt.price,
-                    currency_id: 'BRL'
-                }],
-                external_reference: appointmentId,
-                back_urls: {
-                    success: `${env.FRONTEND_URL}/success?id=${appointmentId}`,
-                    failure: `${env.FRONTEND_URL}/cancel?id=${appointmentId}`,
-                    pending: `${env.FRONTEND_URL}/pending?id=${appointmentId}`
-                },
-                auto_return: 'approved'
-            };
-
-            const mpRes = await fetch('https://api.mercadopago.com/checkout/preferences', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(mpPref)
-            });
-
-            const mpD = await mpRes.json();
-            return json({ paymentUrl: mpD.init_point });
-        } catch (error) {
-            console.error('[MP Preference Error]', error.message);
-            return json({ error: 'Failed' }, 500);
-        }
+        const res = await createMPPreference(env, DB, appointmentId);
+        if (res.error) return json({ error: res.error }, 404);
+        return json(res);
     }
 
     // Mock Payment (Admin/Simulation)

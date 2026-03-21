@@ -3,6 +3,8 @@
  * Encapsula a lógica de banco de dados e integrações das ferramentas de forma genérica.
  */
 import { isValidAppointmentTime, isPastDateTime } from '../utils/time.js';
+import { json } from '../utils/index.js';
+import { createMPPreference } from '../utils/paymentUtils.js';
 
 export const TOOL_ACTIONS = {
     async consultar_agenda({ args, DB, emailReal }) {
@@ -93,11 +95,11 @@ export const TOOL_ACTIONS = {
                 "INSERT INTO appointments (id, user_email, barber_email, service_id, appointment_date, appointment_time, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')"
             ).bind(id, user_email, targetEmail, service_id, date, time).run();
 
-            // Gerar link de pagamento se houver API Key do MP
+            // Gerar link de pagamento REAL via Mercado Pago
             let payMsg = "";
-            if (env.MP_ACCESS_TOKEN) {
-                const payUrl = `${env.FRONTEND_URL || 'https://universal-scheduler.pages.dev'}/pay/${id}`;
-                payMsg = `\n\nLink para pagamento: ${payUrl}`;
+            const prefRes = await createMPPreference(env, DB, id);
+            if (prefRes.paymentUrl) {
+                payMsg = `\n\nLink para pagamento: ${prefRes.paymentUrl}`;
             }
 
             return {

@@ -18,7 +18,7 @@ export async function handleClientFlow(from, text, textLower, session, userInDb,
         if (b.business_type === 'barbearia' || b.business_type === 'default') {
             const team = await env.DB.prepare('SELECT email, name FROM users WHERE is_barber = 1 AND (owner_id = ? OR email = ?)').bind(botProfessionalEmail, botProfessionalEmail).all();
             if (team.results.length > 1) {
-                await env.DB.prepare('INSERT OR REPLACE INTO whatsapp_sessions (phone, state, user_email) VALUES (?, "awaiting_professional", ?)').bind(from, userEmail).run();
+                await env.DB.prepare("INSERT OR REPLACE INTO whatsapp_sessions (phone, state, user_email) VALUES (?, 'awaiting_professional', ?)").bind(from, userEmail).run();
                 let msg = b.msg_choose_professional || CLIENT_PROMPTS.choose_professional(b);
                 team.results.forEach((m, i) => { msg += `*${i + 1}* - ${m.name}\n`; });
                 await sendMessage(env, from, msg, botProfessionalEmail);
@@ -27,8 +27,10 @@ export async function handleClientFlow(from, text, textLower, session, userInDb,
         }
 
         // Sessão padrão no Agente IA (Direto)
-        await env.DB.prepare('INSERT OR REPLACE INTO whatsapp_sessions (phone, state, user_email, selected_barber_email) VALUES (?, "ai_chat", ?, ?)').bind(from, userEmail, b.email).run();
-        const msg = (b.msg_welcome || CLIENT_PROMPTS.ai_welcome(b)).replace(/{{establishment_name}}/g, establishmentName);
+        await env.DB.prepare("INSERT OR REPLACE INTO whatsapp_sessions (phone, state, user_email, selected_barber_email) VALUES (?, 'ai_chat', ?, ?)").bind(from, userEmail, b.email).run();
+        
+        const welcomeParams = { ...b, establishmentName };
+        const msg = (b.msg_welcome || CLIENT_PROMPTS.ai_welcome(welcomeParams)).replace(/{{establishment_name}}/g, establishmentName);
         await sendMessage(env, from, msg, botProfessionalEmail);
         return json({ success: true, branch: "welcome" });
     }
@@ -38,7 +40,7 @@ export async function handleClientFlow(from, text, textLower, session, userInDb,
         const team = await env.DB.prepare('SELECT email, name FROM users WHERE is_barber = 1 AND (owner_id = ? OR email = ?)').bind(botProfessionalEmail, botProfessionalEmail).all();
         const b = team.results[parseInt(text) - 1];
         if (b) {
-            await env.DB.prepare('UPDATE whatsapp_sessions SET state = "ai_chat", selected_barber_email = ? WHERE phone = ?').bind(b.email, from).run();
+            await env.DB.prepare("UPDATE whatsapp_sessions SET state = 'ai_chat', selected_barber_email = ? WHERE phone = ?").bind(b.email, from).run();
             await sendMessage(env, from, `✅ Você está falando com o assistente de *${b.name}*.\nComo posso te ajudar hoje?`, botProfessionalEmail);
         }
         return json({ success: true });
@@ -55,7 +57,7 @@ export async function handleClientFlow(from, text, textLower, session, userInDb,
             return json({ success: true, bot_active: false });
         }
 
-        const services = await env.DB.prepare('SELECT id, name, price FROM services WHERE barber_email = ? AND id != "block"').bind(professionalEmail).all();
+        const services = await env.DB.prepare("SELECT id, name, price FROM services WHERE barber_email = ? AND id != 'block'").bind(professionalEmail).all();
 
         const professionalContext = {
             establishmentName: professional?.shop_name || professional?.name || 'Estabelecimento',

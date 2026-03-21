@@ -63,6 +63,30 @@ function App() {
   });
   const [adminTab, setAdminTab] = useState('agenda');
   const [sheetView, setSheetView] = useState('main');
+  const [redirectingToPayment, setRedirectingToPayment] = useState(false);
+
+  // --- REDIRECIONAMENTO DE PAGAMENTO (Deep Link) ---
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path.startsWith('/pay/')) {
+      const apptId = path.split('/pay/')[1];
+      if (apptId) {
+        setRedirectingToPayment(true);
+        api.createPayment(null, apptId).then(res => {
+          if (res.paymentUrl) {
+            window.location.href = res.paymentUrl;
+          } else {
+            alert('Agendamento não encontrado ou link expirado.');
+            setRedirectingToPayment(false);
+            window.location.pathname = '/';
+          }
+        }).catch(() => {
+          alert('Erro ao processar pagamento. Tente novamente.');
+          setRedirectingToPayment(false);
+        });
+      }
+    }
+  }, []);
 
   const timeSlots = [
     "07:00", "07:30", "08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
@@ -586,6 +610,18 @@ function App() {
       fetchBusySlots(selectedDate, professional);
     }
   }, [selectedProfessional, selectedDate, user, fetchBusySlots, fetchServices]);
+
+  if (redirectingToPayment) {
+    return (
+      <div className="redirect-container">
+        <div className="redirect-card">
+          <div className="payment-loader"></div>
+          <h2>Processando Pagamento</h2>
+          <p>Aguarde enquanto redirecionamos você para o Mercado Pago...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) return <LoginScreen onManualLogin={handleLogin} loading={loading} VITE_GOOGLE_CLIENT_ID={import.meta.env.VITE_GOOGLE_CLIENT_ID} />;
 
