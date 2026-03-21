@@ -17,8 +17,8 @@ const remoteDB = {
                 try {
                     execSync(`npx wrangler d1 execute barber-db --remote --command="${cleanSql}"`, { encoding: 'utf-8', stdio: 'inherit' });
                     return { success: true };
-                } catch (e) {
-                    return { success: false, error: e.message };
+                } catch {
+                    return { success: false };
                 }
             },
             all: async () => {
@@ -31,7 +31,7 @@ const remoteDB = {
                     const output = execSync(`npx wrangler d1 execute barber-db --remote --command="${cleanSql}" --json`, { encoding: 'utf-8' });
                     const parsed = JSON.parse(output);
                     return { results: parsed[0]?.results || [] };
-                } catch (e) {
+                } catch {
                     return { results: [] };
                 }
             },
@@ -45,7 +45,7 @@ const remoteDB = {
                     const output = execSync(`npx wrangler d1 execute barber-db --remote --command="${cleanSql}" --json`, { encoding: 'utf-8' });
                     const parsed = JSON.parse(output);
                     return parsed[0]?.results[0] || null;
-                } catch (e) {
+                } catch {
                     return null;
                 }
             }
@@ -58,7 +58,7 @@ let step = 0;
 let lastApptId = '';
 
 const mockAI = {
-    run: async (model, { messages }) => {
+    run: async ({ messages }) => {
         const lastMsg = messages[messages.length - 1].content.toLowerCase();
         step++;
         console.log(`\n[STEP ${step}] AI Input: "${lastMsg.substring(0, 50)}..."`);

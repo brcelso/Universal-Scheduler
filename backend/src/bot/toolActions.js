@@ -3,7 +3,6 @@
  * Encapsula a lógica de banco de dados e integrações das ferramentas de forma genérica.
  */
 import { isValidAppointmentTime, isPastDateTime } from '../utils/time.js';
-import { json } from '../utils/index.js';
 import { createMPPreference } from '../utils/paymentUtils.js';
 
 export const TOOL_ACTIONS = {

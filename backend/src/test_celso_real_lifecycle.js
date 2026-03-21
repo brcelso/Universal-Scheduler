@@ -49,9 +49,9 @@ const remoteDB = {
 let step = 0;
 let lastApptId = '';
 const mockAI = {
-    run: async (model, { messages }) => {
+    run: async () => {
         step++;
-        const lastMsg = messages[messages.length - 1].content.toLowerCase();
+        // step++;
         
         if (step === 1) { // Booking Tool Call
             return {
