@@ -12,12 +12,12 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      # Atualizado para v6
-      - uses: actions/checkout@v6
+      # Atualizado para v4
+      - uses: actions/checkout@v4
 
-      # Atualizado para v6 e Node 22 (LTS)
+      # Atualizado para v4 e Node 22 (LTS)
       - name: Set up Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'npm'
