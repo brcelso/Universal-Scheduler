@@ -10,7 +10,7 @@ export async function getSmartContext(DB, userMessage, professionalEmail) {
     const keywords = {
         services: /(preco|quanto|servico|corte|faz|valor|horario|agenda|marcar|agendar|disponivel)/i,
         team: /(quem|atende|profissional|barbeiro|cabeleireiro|equipe|time|membro)/i,
-        business: /(nome|onde|endereco|local|loja|estabelecimento|empresa)/i
+        business: /(nome|onde|endereco|local|loja|estabelecimento|empresa|unidade|unidades)/i
     };
 
     let context = "\n[CONTEXTO DE NEGÓCIO SELECIONADO]:\n";
