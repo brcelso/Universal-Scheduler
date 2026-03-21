@@ -27,11 +27,28 @@ app.use(bodyParser.json());
  
  // --- FILTRO DE RUÍDO NO TERMINAL ---
  // Algumas dependências (como libsignal) usam console.info diretamente, ignorando o logger do pino.
- const originalInfo = console.info;
- console.info = function (...args) {
-     if (typeof args[0] === 'string' && args[0].includes('Closing session:')) return;
-     originalInfo.apply(console, args);
- };
+  const originalInfo = console.info;
+  const originalLog = console.log;
+  
+  const filterNoise = (args) => {
+      if (typeof args[0] === 'string' && (
+          args[0].includes('Closing session:') || 
+          args[0].includes('Closing open session') || 
+          args[0].includes('Removing old prekey') ||
+          args[0].includes('Prekey bundle')
+      )) return true;
+      return false;
+  };
+
+  console.info = function (...args) {
+      if (filterNoise(args)) return;
+      originalInfo.apply(console, args);
+  };
+  
+  console.log = function (...args) {
+      if (filterNoise(args)) return;
+      originalLog.apply(console, args);
+  };
  
 const sessions = new Map();
 const sessionTimers = new Map();

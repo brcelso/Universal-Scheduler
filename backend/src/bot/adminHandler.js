@@ -10,7 +10,10 @@ export async function handleAdminFlow(from, text, textLower, adminInfo, botProfe
 
     if (!session || isMenuCommand) {
         await env.DB.prepare('INSERT OR REPLACE INTO whatsapp_sessions (phone, state, user_email, selected_barber_email, metadata) VALUES (?, "admin_ai_chat", ?, ?, "{}")').bind(from, adminInfo.email, adminInfo.email).run();
-        // Removido o sendMessage fixo para deixar a IA responder com o briefing
+        
+        const menuMsg = ADMIN_PROMPTS.main_menu(adminInfo);
+        await sendMessage(env, from, menuMsg, botProfessionalEmail);
+        return json({ success: true });
     }
 
     // 2. Buscar Status do WhatsApp para Contexto do Admin
@@ -40,7 +43,8 @@ export async function handleAdminFlow(from, text, textLower, adminInfo, botProfe
             business_type: adminInfo.business_type || 'default', // Multi-nicho
             name: adminInfo.name,
             bName: adminInfo.bot_name || 'Leo',
-            bTone: adminInfo.bot_tone || 'profissional'
+            bTone: adminInfo.bot_tone || 'profissional',
+            isMaster: adminInfo.email === 'celsosilvajunior90@gmail.com'
         };
 
         const aiData = await runAgentChat(env, {

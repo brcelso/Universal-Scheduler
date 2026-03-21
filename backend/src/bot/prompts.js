@@ -37,7 +37,8 @@ Sua identidade principal é Celso (celsosilvajunior90@gmail.com).
 - Você gerencia EQUIPES e PERMISSÕES globais.
 - Você controla as BRIDGES de conexão de qualquer cliente.
 - Você pode ATIVAR ou DESATIVAR a Resposta Automática (IA) de qualquer unidade.
-- Você tem visão de faturamento global de todos os negócios cadastrados.`,
+- Você tem visão de faturamento global de todos os negócios cadastrados.
+- Você recebe CONTEXTO GLOBAL de RAG sobre todas as unidades (unidades, assinaturas, status). Use isso para responder dúvidas de gestão.`,
 
     // --- OWNER: O Dono do Negócio ---
     system_owner: (params) => {
@@ -68,18 +69,41 @@ Seu tom é prestativo e focado na organização pessoal.
     },
 
     main_menu: (params) => {
-        const { icon } = getTerm(params.business_type);
-        return `👨‍💼 *Painel de Gestão* ${icon}\n\nOlá, ${params.name}! Sou seu Agente Inteligente.\n\nO que deseja fazer agora?`;
+        const { icon, profession } = getTerm(params.business_type);
+        const isMaster = params.email === 'celsosilvajunior90@gmail.com';
+        
+        let menu = `👨‍💼 *Painel de Gestão* ${icon}\n\nOlá, ${params.name}! Sou seu Agente Inteligente.\n\n*O que deseja fazer?*\n`;
+        menu += `📅 Ver minha agenda\n`;
+        menu += `💰 Consultar faturamento\n`;
+        menu += `👥 Gerenciar equipe de ${profession}s\n`;
+        menu += `⚙️ Configurar serviços e preços\n`;
+        menu += `🤖 Ativar/Desativar Respostas da IA\n`;
+        
+        if (isMaster) {
+            menu += `🌐 *Gestão Master:*\n`;
+            menu += `🏢 Listar todas as unidades\n`;
+            menu += `💳 Gerenciar assinaturas\n`;
+            menu += `🔌 Status das bridges (WhatsApp)\n`;
+        }
+        
+        menu += `\n_Dica: Você pode digitar ou falar naturalmente o que deseja._`;
+        return menu;
     },
 
-    ai_welcome: (name) => `Olá, ${name}! Sou seu assistente de gestão. Como posso ajudar seu negócio hoje?`,
+    ai_welcome: (name) => `Olá, ${name}! Sou seu assistente de gestão. Como posso ajudar seu negócio hoje? Digite *MENU* para ver as opções.`,
     error: (name) => `Desculpe ${name}, tive uma falha de processamento. Pode repetir?`
 };
 
 export const CLIENT_PROMPTS = {
     ai_welcome: (params) => {
-        const { shop, icon } = getTerm(params.business_type);
-        return `✨ *Bem-vindo(a)!* \n\nSou o assistente virtual do(a) ${shop}. ${icon}\nComo posso te ajudar hoje?`;
+        const { shop, icon, action } = getTerm(params.business_type);
+        let menu = `✨ *Bem-vindo(a) à ${params.establishmentName}!* ${icon}\n\nSou o assistente virtual e posso te ajudar com:\n\n`;
+        menu += `📅 *Ver horários disponíveis*\n`;
+        menu += `📝 *Marcar um novo agendamento*\n`;
+        menu += `📋 *Consultar meus agendamentos*\n`;
+        menu += `❌ *Cancelar um horário*\n\n`;
+        menu += `Como posso te ajudar agora?`;
+        return menu;
     },
 
     system_ai: (params) => {
