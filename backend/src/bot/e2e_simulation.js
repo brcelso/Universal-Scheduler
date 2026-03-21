@@ -54,7 +54,7 @@ const mockDB = {
 };
 
 const mockAI = {
-    run: async (_, { messages, tools }) => {
+    run: async (_, { messages }) => {
         const lastMsg = messages[messages.length - 1].content.toLowerCase();
         
         // Simulação de decisão da IA baseada no prompt
@@ -112,7 +112,7 @@ async function runSimulation() {
 
     // PASSO 4: CLIENTE AGENDA COM LEO
     console.log("\n4️⃣ [CLIENTE] Agendando na Barbearia do Leo...");
-    const clientResult = await runAgentChat(mockEnv, {
+    await runAgentChat(mockEnv, {
         prompt: "Quero agendar um Corte Moderno para quinta-feira dia 15/10 as 10:00",
         userEmail: "cliente@gmail.com",
         isAdmin: false,
