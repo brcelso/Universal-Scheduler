@@ -15,6 +15,7 @@ export async function handleAppointmentRoutes(url, request, env) {
                 s.name as service_name, 
                 s.price, 
                 u.name as client_name, 
+                u.phone as client_phone,
                 u.picture as client_picture,
                 pr.name as professional_name,
                 pr.picture as professional_picture

@@ -21,7 +21,7 @@ export const ActionSheet = ({
 
                 {sheetView === 'main' ? (
                     <>
-                        <h3 style={{ textAlign: 'center', marginBottom: '1.5rem', color: 'var(--primary)' }}>Ações para {selectedActionAppt.user_name}</h3>
+                        <h3 style={{ textAlign: 'center', marginBottom: '1.5rem', color: 'var(--primary)' }}>Ações para {selectedActionAppt.client_name}</h3>
                         <div className="action-list">
                             <button className="action-item" onClick={() => { handleEditStart(selectedActionAppt); setSelectedActionAppt(null); }}>
                                 <Calendar size={20} className="text-primary" /> Reagendar / Mudar Serviço
@@ -54,7 +54,7 @@ export const ActionSheet = ({
                                 <button
                                     key={opt.id}
                                     className="action-item"
-                                    onClick={() => updateStatus(opt.id)}
+                                    onClick={() => { updateStatus(opt.id); setSelectedActionAppt(null); }}
                                 >
                                     {opt.icon} {opt.label}
                                 </button>
@@ -70,13 +70,13 @@ export const ActionSheet = ({
                         <div className="action-list">
                             <button
                                 className="action-item"
-                                onClick={() => updatePayment('paid')}
+                                onClick={() => { updatePayment('paid'); setSelectedActionAppt(null); }}
                             >
                                 <CheckCircle size={18} color="#2ecc71" /> Marcar como PAGO (Local)
                             </button>
                             <button
                                 className="action-item"
-                                onClick={() => updatePayment('pending')}
+                                onClick={() => { updatePayment('pending'); setSelectedActionAppt(null); }}
                             >
                                 <Clock size={18} color="rgba(255,255,255,0.4)" /> Marcar como PENDENTE
                             </button>
