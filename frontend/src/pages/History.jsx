@@ -44,6 +44,7 @@ export const HistoryPage = ({
                                                 )}
                                             </div>
                                             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.2rem' }}>{appt.service_name}</h3>
+                                            <p style={{ color: 'var(--primary)', fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.2rem' }}>Cliente: {appt.client_name}</p>
                                             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                                                 {format(dateObj, "dd 'de' MMMM", { locale: ptBR })} às {appt.appointment_time}
                                             </p>
