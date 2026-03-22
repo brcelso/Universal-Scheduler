@@ -97,18 +97,19 @@ export default {
 
             // --- WHATSAPP BRIDGE STATUS UPDATES ---
             if ((url.pathname === '/api/whatsapp/status' || url.pathname === '/api/admin/bridge/update') && request.method === 'POST') {
-                const { email, status, qr } = await request.json();
+                const { email, status, qr, pair_code } = await request.json();
                 const now = new Date().toISOString();
+                console.log(`[Status Update] ${email} - Status: ${status}, QR: ${qr ? 'Yes' : 'No'}, Code: ${pair_code || 'No'}`);
 
-                if (status === 'qr') {
-                    await DB.prepare('UPDATE users SET wa_status = "awaiting_qr", wa_qr = ?, wa_last_seen = ? WHERE email = ?').bind(qr, now, email).run();
-                } else if (status === 'connected') {
-                    await DB.prepare('UPDATE users SET wa_status = "connected", wa_qr = NULL, wa_last_seen = ? WHERE email = ?').bind(now, email).run();
-                } else if (status === 'heartbeat') {
-                    await DB.prepare('UPDATE users SET wa_last_seen = ? WHERE email = ?').bind(now, email).run();
-                } else {
-                    await DB.prepare('UPDATE users SET wa_status = "disconnected", wa_qr = NULL, wa_last_seen = ? WHERE email = ?').bind(now, email).run();
-                }
+                await DB.prepare(`
+                    UPDATE users SET 
+                        wa_status = ?, 
+                        wa_qr = ?, 
+                        wa_pair_code = ?,
+                        wa_last_seen = ?,
+                        updated_at = ?
+                    WHERE email = ?
+                `).bind(status || 'unknown', qr || null, pair_code || null, now, now, email).run();
 
                 // Autoconfiguração para o Master (Celso)
                 if (email === MASTER_EMAIL) {
@@ -124,7 +125,7 @@ export default {
             // Rota GET para o Dashboard consultar o status
             if (url.pathname === '/api/whatsapp/status' && request.method === 'GET') {
                 const email = request.headers.get('X-User-Email');
-                const user = await DB.prepare('SELECT wa_status, wa_qr, wa_last_seen FROM users WHERE email = ?').bind(email).first();
+                const user = await DB.prepare('SELECT wa_status, wa_qr, wa_pair_code, wa_last_seen FROM users WHERE email = ?').bind(email).first();
                 if (!user) return json({ error: 'User not found' }, 404);
 
                 let status = user.wa_status || 'disconnected';
@@ -135,7 +136,7 @@ export default {
                         await DB.prepare('UPDATE users SET wa_status = "disconnected" WHERE email = ?').bind(email).run();
                     }
                 }
-                return json({ status, qr: user.wa_qr });
+                return json({ status, qr: user.wa_qr, pair_code: user.wa_pair_code });
             }
 
             // --- ROTA DE LOGIN (PARA O FRONTEND) ---

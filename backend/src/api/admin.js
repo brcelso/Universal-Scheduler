@@ -184,6 +184,28 @@ export async function handleAdminRoutes(url, request, env) {
         return json({ success: true });
     }
 
+    // Admin: Get/Save Bridge Session Snapshot (D1 Persistence)
+    if (url.pathname === '/api/admin/bridge/session' && request.method === 'POST') {
+        const { key, email, payload } = await request.json();
+        if (key !== env.WA_BRIDGE_KEY) return json({ error: 'Invalid Key' }, 401);
+        
+        await DB.prepare(`
+            INSERT INTO wa_sessions (professional_email, session_payload, updated_at) 
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(professional_email) DO UPDATE SET session_payload = excluded.session_payload, updated_at = CURRENT_TIMESTAMP
+        `).bind(email, payload).run();
+        return json({ success: true });
+    }
+
+    if (url.pathname === '/api/admin/bridge/session' && request.method === 'GET') {
+        const key = url.searchParams.get('key');
+        const email = url.searchParams.get('email');
+        if (key !== env.WA_BRIDGE_KEY) return json({ error: 'Invalid Key' }, 401);
+
+        const session = await DB.prepare('SELECT session_payload FROM wa_sessions WHERE professional_email = ?').bind(email).first();
+        return json({ payload: session?.session_payload || null });
+    }
+
     // Admin: Remote Start/Stop Bot
     if ((url.pathname === '/api/admin/bot/start' || url.pathname === '/api/admin/bot/stop') && request.method === 'POST') {
         const email = request.headers.get('X-User-Email');
