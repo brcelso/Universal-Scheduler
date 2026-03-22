@@ -54,6 +54,7 @@ app.use(bodyParser.json());
 const sessions = new Map();
 const sessionTimers = new Map();
 
+
 async function connectToWhatsApp(emailRaw) {
     let email = emailRaw;
     // Remapear e-mail fantasma se ele vier de alguma fonte antiga
@@ -99,13 +100,13 @@ async function connectToWhatsApp(emailRaw) {
     const { version } = await fetchLatestWaWebVersion().catch(() => ({ version: [2, 3000, 1015901307] }));
 
     const sock = makeWASocket({
-        version: [2, 3000, 1015901307], // Versão ultra-estável forçada
+        version, // Usar versão dinâmica detectada
         logger: pino({ level: 'silent' }),
         auth: state,
         printQRInTerminal: false,
         browser: ["Windows", "Chrome", "122.0.6261.129"],
         markOnlineOnConnect: false,
-        syncFullHistory: false, // Evita sobrecarga no pareamento
+        syncFullHistory: false,
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
         keepAliveIntervalMs: 10000
@@ -449,4 +450,14 @@ app.listen(PORT, () => {
     console.log(`🚀 Universal Multi-Bridge rodando na porta ${PORT}`);
     // 4. Iniciar sessões existentes do disco
     loadExistingSessions();
+
+    // Auto-carregar a sessão do administrador como fallback (se não estiver pareando)
+    if (!process.env.WA_PAIRING_PHONE) {
+        setTimeout(() => {
+            if (sessions.size === 0 && ADMIN_EMAIL) {
+                console.log(`[Boot] 🚀 Iniciando sessão padrão do administrador: ${ADMIN_EMAIL}`);
+                connectToWhatsApp(ADMIN_EMAIL);
+            }
+        }, 2000);
+    }
 });
