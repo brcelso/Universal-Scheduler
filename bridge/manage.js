@@ -22,7 +22,16 @@ let isActive = false;
 
 // --- FUNÇÃO DE LICENCIAMENTO ---
 async function checkLicense() {
-    return { isActive: true }; // Forçado para estabilidade no rollback
+    try {
+        const res = await axios.get(`${API_URL}/admin/subscription`, {
+            headers: { 'X-User-Email': ADMIN_EMAIL },
+            timeout: 10000
+        });
+        return res.data;
+    } catch (e) {
+        console.error(`❌ Falha na conexão (${new Date().toLocaleTimeString()}):`, e.message);
+        return null;
+    }
 }
 
 // --- FUNÇÃO NGROK (COM CORREÇÃO DE DOMÍNIO E AUTH) ---
