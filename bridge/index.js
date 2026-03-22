@@ -2,7 +2,8 @@ const {
     default: makeWASocket,
     useMultiFileAuthState,
     DisconnectReason,
-    fetchLatestWaWebVersion
+    fetchLatestWaWebVersion,
+    Browsers
 } = require('@whiskeysockets/baileys');
 const qrcodeTerminal = require('qrcode-terminal');
 const express = require('express');
@@ -103,7 +104,9 @@ async function connectToWhatsApp(emailRaw) {
         logger: pino({ level: 'silent' }),
         auth: state,
         printQRInTerminal: false,
-        markOnlineOnConnect: false
+        markOnlineOnConnect: false,
+        browser: Browsers.macOS('Desktop'), // <--- Oficial e mais estável
+        syncFullHistory: false
     });
 
     console.log(`[Debug] Socket criado com versão: ${version.join('.')}`);
