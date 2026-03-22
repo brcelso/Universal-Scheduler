@@ -2,8 +2,7 @@ const {
     default: makeWASocket,
     useMultiFileAuthState,
     DisconnectReason,
-    fetchLatestWaWebVersion,
-    Browsers
+    fetchLatestWaWebVersion
 } = require('@whiskeysockets/baileys');
 const qrcodeTerminal = require('qrcode-terminal');
 const express = require('express');
@@ -15,7 +14,6 @@ const QRCode = require('qrcode');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-// SyncUtils removido para reversão local
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const STATUS_URL = 'https://barber-server.celsosilvajunior90.workers.dev/api/whatsapp/status';
@@ -55,7 +53,6 @@ app.use(bodyParser.json());
 const sessions = new Map();
 const sessionTimers = new Map();
 
-
 async function connectToWhatsApp(emailRaw) {
     let email = emailRaw;
     // Remapear e-mail fantasma se ele vier de alguma fonte antiga
@@ -70,84 +67,21 @@ async function connectToWhatsApp(emailRaw) {
     }
 
     console.log(`[Session] 🔄 Iniciando conexão: ${email}`);
-    
-    const safeId = email.replace(/[^a-zA-Z0-9]/g, '_');
-    const authFolder = path.join(__dirname, 'auth_sessions', `session_${safeId}`);
+    const safeId = Buffer.from(email).toString('hex');
+    const authFolder = `auth_sessions/session_${safeId}`;
 
-    // Limpar pasta se for pareamento
-    const isPairing = !!(process.env.WA_PAIRING_PHONE || global.pendingPairing?.email === email);
-    if (isPairing && fs.existsSync(authFolder)) {
-        console.log(`[Session] 🧹 Limpando pasta de sessão local: ${authFolder}`);
-        fs.rmSync(authFolder, { recursive: true, force: true });
-    }
-
-    if (!fs.existsSync(authFolder)) {
-        fs.mkdirSync(authFolder, { recursive: true });
-    }
+    if (!fs.existsSync('auth_sessions')) fs.mkdirSync('auth_sessions');
 
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
-    const { version } = await fetchLatestWaWebVersion().catch(() => ({ version: [2, 3010, 1] }));
+    const { version } = await fetchLatestWaWebVersion().catch(() => ({ version: [2, 3000, 1015901307] }));
 
     const sock = makeWASocket({
         version,
         logger: pino({ level: 'silent' }),
         auth: state,
-        printQRInTerminal: false,
-        browser: ["Windows", "Chrome", "122.0.6261.129"],
-        markOnlineOnConnect: false
+        browser: ['Universal App', 'Chrome', '1.0.0'],
+        markOnlineOnConnect: true
     });
-
-    console.log(`[Debug] Socket iniciado (Local-Only Mode). Versão: ${version.join('.')}`);
-    const credsFile = path.join(authFolder, 'creds.json');
-    if (fs.existsSync(credsFile)) {
-        console.log(`[Debug] creds.json detectado (Tamanho: ${fs.statSync(credsFile).size} bytes)`);
-    } else {
-        console.log(`[Debug] Nenhum creds.json encontrado (Pasta Limpa ✅)`);
-    }
-
-    // --- PAREAMENTO POR CÓDIGO (MOBILE FIRST) ---
-    const envPairPhone = process.env.WA_PAIRING_PHONE;
-    if (global.pendingPairing?.email === email || (envPairPhone && email === ADMIN_EMAIL)) {
-        let phoneNumber = (global.pendingPairing?.phone || envPairPhone).replace(/\D/g, '');
-        
-        // Ajuste automático para números do Brasil (Desativado temporariamente para debugar)
-        /*
-        if (phoneNumber.startsWith('55') && phoneNumber.length === 13) {
-            const ddd = parseInt(phoneNumber.substring(2, 4));
-            if (ddd < 30) {
-                const oldNumber = phoneNumber;
-                phoneNumber = phoneNumber.substring(0, 4) + phoneNumber.substring(5);
-                console.log(`[Session] 🔄 Ajustando número para pareamento (Removendo 9): ${oldNumber} -> ${phoneNumber}`);
-            }
-        }
-        */
-
-        console.log(`[Session] 📱 Solicitando Código para ${phoneNumber}...`);
-        
-        setTimeout(async () => {
-            if (sock.authState.creds.me) return;
-
-            try {
-                const code = await sock.requestPairingCode(phoneNumber);
-                if (global.pendingPairing) global.pendingPairing.result = code;
-                
-                await axios.post(STATUS_URL, {
-                    email: email,
-                    status: 'awaiting_code',
-                    qr: null,
-                    pair_code: code
-                }).catch(() => {});
-
-                console.log(`\n************************************`);
-                console.log(`📡 CÓDIGO ÚNICO: ${code}`);
-                console.log(`************************************\n`);
-                console.log(`⚠️  Digite o código no seu celular agora.`);
-            } catch (e) {
-                console.error(`[Session Error] Falha ao gerar código:`, e.message);
-                console.log('💡 DICA: Digite Ctrl+C e tente novamente se precisar de novo código.');
-            }
-        }, 6000); // 6 segundos para garantir que o socket registrou no servidor
-    }
 
     sessions.set(email, sock);
 
@@ -210,19 +144,9 @@ async function connectToWhatsApp(emailRaw) {
         }
     });
 
-    // --- CREDENCIAIS ---
-    sock.ev.on('creds.update', async () => {
-        await saveCreds();
-    });
-
     // --- ATUALIZAÇÃO DE CONEXÃO E QR CODE ---
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
-        
-        // Debug profundo para entender o 401
-        if (lastDisconnect?.error) {
-            console.log(`[Debug Connection] Update:`, JSON.stringify(update, null, 2));
-        }
 
         if (qr) {
             console.log(`[QR] 📲 Novo código gerado para ${email}. Escaneie abaixo:`);
@@ -230,7 +154,7 @@ async function connectToWhatsApp(emailRaw) {
 
             try {
                 const qrImage = await QRCode.toDataURL(qr);
-                await axios.post(STATUS_URL, { email, status: 'qr', qr: qrImage, pair_code: null });
+                await axios.post(STATUS_URL, { email, status: 'qr', qr: qrImage });
             } catch (e) { console.error('Erro ao enviar QR para o Worker:', e.message); }
         }
 
@@ -238,14 +162,12 @@ async function connectToWhatsApp(emailRaw) {
             const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
             console.log(`[Session] (${email}) Conexão fechada. Razão: ${reason}`);
 
-            axios.post(STATUS_URL, { email, status: 'disconnected', qr: null, pair_code: null, reason }).catch(() => { });
+            axios.post(STATUS_URL, { email, status: 'disconnected', reason }).catch(() => { });
 
-            // Só deletar a pasta se for um LOGOUT real (quando o usuário desconecta pelo celular)
-            // No Baileys, loggedOut costuma ser 401, mas durante o pareamento isso pode confundir.
-            if (reason === DisconnectReason.loggedOut && !envPairPhone && !global.pendingPairing) {
+            if (reason === DisconnectReason.loggedOut || reason === DisconnectReason.connectionReplaced) {
                 sessions.delete(email);
                 const safeId = Buffer.from(email).toString('hex');
-                const authFolder = path.join(__dirname, 'auth_sessions', `session_${safeId}`);
+                const authFolder = path.join('auth_sessions', `session_${safeId}`);
                 if (fs.existsSync(authFolder)) {
                     // Pequeno delay para o Windows liberar os handles dos arquivos
                     setTimeout(() => {
@@ -270,14 +192,6 @@ async function connectToWhatsApp(emailRaw) {
                 }
             } else {
                 if (sessions.has(email)) {
-                    // SE ESTIVERMOS EM PAREAMENTO, NÃO RECONECTA AUTOMATICAMENTE NO 401
-                    // Pois isso gera um loop infinito de novos códigos
-                    if (isPairing && reason === 401) {
-                        console.log(`[Session] 🛑 Pausa de segurança: 401 detectado durante pareamento. Verifique se o número ${process.env.WA_PAIRING_PHONE} está correto.`);
-                        sessions.delete(email);
-                        return;
-                    }
-
                     console.log(`[Session] (${email}) Tentando reconectar em 5s...`);
                     setTimeout(() => {
                         if (sessions.has(email)) {
@@ -290,7 +204,7 @@ async function connectToWhatsApp(emailRaw) {
         } else if (connection === 'open') {
             console.log(`[Session] ✅ ${email} CONECTADO COM SUCESSO! ID: ${sock.user?.id}`);
             fs.appendFileSync('bridge_logs.txt', `[${new Date().toISOString()}] Bot connected as ${sock.user?.id}\n`);
-            axios.post(STATUS_URL, { email, status: 'connected', qr: null, pair_code: null }).catch(() => { });
+            axios.post(STATUS_URL, { email, status: 'connected' }).catch(() => { });
         }
     });
 
@@ -356,38 +270,6 @@ app.post('/api/stop', async (req, res) => {
     }
 });
 
-// --- ENDPOINT PARA PAREAMENTO POR CÓDIGO (MOBILE) ---
-global.pendingPairing = null;
-
-app.post('/api/pair-code', async (req, res) => {
-    const { key, email, phone } = req.body;
-    if (key !== API_KEY) return res.status(401).json({ error: 'Chave inválida' });
-    if (!email || !phone) return res.status(400).json({ error: 'Email e telefone são obrigatórios' });
-
-    console.log(`[PairCode] 📱 Solicitação para ${phone} (Email: ${email})`);
-    
-    // Armazena temporariamente para que o connectToWhatsApp saiba o que fazer
-    global.pendingPairing = { email, phone, result: null };
-
-    // Inicia a conexão (que vai disparar o requestPairingCode)
-    await connectToWhatsApp(email);
-
-    // Espera até 10 segundos pelo código
-    let attempts = 0;
-    const checkInterval = setInterval(() => {
-        if (global.pendingPairing?.result) {
-            clearInterval(checkInterval);
-            res.json({ success: true, code: global.pendingPairing.result });
-            global.pendingPairing = null;
-        }
-        if (++attempts > 20) {
-            clearInterval(checkInterval);
-            res.status(504).json({ error: 'Timeout ao gerar código' });
-            global.pendingPairing = null;
-        }
-    }, 500);
-});
-
 app.post('/send-message', async (req, res) => {
     const { key, number, message, professional_email, barber_email: oldBarberEmail } = req.body;
     const targetEmail = professional_email || oldBarberEmail;
@@ -429,16 +311,13 @@ app.post('/send-message', async (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`🚀 Universal Multi-Bridge rodando na porta ${PORT}`);
-    // 4. Iniciar sessões existentes do disco
     loadExistingSessions();
 
-    // Auto-carregar a sessão do administrador como fallback (se não estiver pareando)
-    if (!process.env.WA_PAIRING_PHONE) {
-        setTimeout(() => {
-            if (sessions.size === 0 && ADMIN_EMAIL) {
-                console.log(`[Boot] 🚀 Iniciando sessão padrão do administrador: ${ADMIN_EMAIL}`);
-                connectToWhatsApp(ADMIN_EMAIL);
-            }
-        }, 2000);
-    }
+    // Auto-carregar a sessão do administrador se nada foi carregado
+    setTimeout(() => {
+        if (sessions.size === 0 && ADMIN_EMAIL) {
+            console.log(`[Boot] 🚀 Iniciando sessão padrão do administrador: ${ADMIN_EMAIL}`);
+            connectToWhatsApp(ADMIN_EMAIL);
+        }
+    }, 2000);
 });

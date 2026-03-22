@@ -1,5 +1,4 @@
 const { exec, spawn } = require('child_process');
-const readline = require('readline');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
@@ -8,18 +7,14 @@ const fs = require('fs');
 const envPath = path.resolve(__dirname, '../.env');
 if (fs.existsSync(envPath)) {
     require('dotenv').config({ path: envPath });
+    console.log('📝 Arquivo .env carregado com sucesso.');
+} else {
+    console.error('❌ ERRO: Arquivo .env não encontrado em: ' + envPath);
 }
 
 const API_URL = 'https://barber-server.celsosilvajunior90.workers.dev/api';
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'celsosilvajunior90@gmail.com'; 
+const ADMIN_EMAIL = 'celsosilvajunior90@gmail.com'; 
 const FIXED_DOMAIN = 'nisi-marbly-maeve.ngrok-free.dev'; // Seu domínio fixo ngrok
-
-// --- GERENCIADOR DE INPUT ---
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-const question = (query) => new Promise((resolve) => rl.question(query, resolve));
-
-// --- PARSE ARGUMENTOS ---
-let PAIR_PHONE = process.argv.find(arg => arg.startsWith('--pair='))?.split('=')[1];
 
 let ngrokProcess = null;
 let whatsappProcess = null;
@@ -37,24 +32,6 @@ async function checkLicense() {
         console.error(`❌ Falha na conexão (${new Date().toLocaleTimeString()}):`, e.message);
         return null;
     }
-}
-
-// --- FUNÇÃO DE LIMPEZA (ROBUSTEZ) ---
-function cleanupOldProcesses() {
-    return new Promise((resolve) => {
-        console.log('🧹 Limpando processos antigos (Ngrok/Node)...');
-        const isWin = process.platform === 'win32';
-        
-        // No Windows, mata ngrok.exe. No Linux/Mac, mata apenas no final se necessário.
-        const cmd = isWin 
-            ? 'taskkill /F /IM ngrok.exe /T 2>nul & taskkill /F /IM node.exe /FI "WINDOWTITLE eq npm*" /T 2>nul' 
-            : 'pkill -f ngrok || true';
-
-        exec(cmd, (err) => {
-            // Ignoramos erros se não houver nada para matar
-            resolve();
-        });
-    });
 }
 
 // --- FUNÇÃO NGROK (COM CORREÇÃO DE DOMÍNIO E AUTH) ---
@@ -111,11 +88,7 @@ async function startWhatsApp() {
     
     // Executa o index.js da ponte
     whatsappProcess = exec(`"${nodeExe}" index.js`, {
-        env: { 
-            ...process.env, 
-            ADMIN_EMAIL: ADMIN_EMAIL,
-            WA_PAIRING_PHONE: PAIR_PHONE // <--- Passa o número se existir
-        }
+        env: { ...process.env, ADMIN_EMAIL: ADMIN_EMAIL }
     });
 
     whatsappProcess.stdout.on('data', (data) => process.stdout.write(`[WhatsApp] ${data}`));
@@ -125,9 +98,8 @@ async function startWhatsApp() {
         console.log(`\nPonte fechada (Código: ${code})`);
         whatsappProcess = null;
         if (isActive) {
-            console.log('⚠️ Serviço interrompido. Verifique o terminal para erros.');
-            console.log('⏳ Reiniciando gerenciador em 30s...');
-            setTimeout(() => { isActive = false; }, 30000);
+            console.log('⚠️ Reiniciando serviços em 5s...');
+            setTimeout(() => { isActive = false; }, 5000);
         }
     });
 }
@@ -142,48 +114,11 @@ function stopAll() {
 // --- LOOP PRINCIPAL ---
 async function run() {
     console.log('--- GERENCIADOR UNIVERSAL BRIDGE ---');
-    
-    // Verificação de Sessão Existente para o Admin
-    const safeId = Buffer.from(ADMIN_EMAIL).toString('hex');
-    const sessionDir = path.join(__dirname, 'auth_sessions', `session_${safeId}`);
-    const hasSession = fs.existsSync(sessionDir);
-
-    if (!PAIR_PHONE) {
-        console.log(`\n📍 Admin: ${ADMIN_EMAIL}`);
-        if (hasSession) {
-            console.log(`✅ Sessão anterior encontrada.`);
-            console.log(`[0] Continuar conexão existente (Padrão)`);
-            console.log(`[1] Novo QR Code (Desconectar e gerar novo)`);
-            console.log(`[2] Novo Código de Pareamento (Desconectar e gerar código Mobile)`);
-            
-            const choice = await question('\nDigite sua opção (0, 1 ou 2) [Enter para 0]: ');
-            if (choice === '1' || choice === '2') {
-                console.log('🧹 Limpando sessão anterior para nova conexão...');
-                fs.rmSync(sessionDir, { recursive: true, force: true });
-                if (choice === '2') {
-                    PAIR_PHONE = await question('Digite o número do WhatsApp (ex: 5511999998888): ');
-                }
-            }
-        } else {
-            console.log(`👋 Nenhuma sessão encontrada para ${ADMIN_EMAIL}`);
-            console.log(`[1] QR Code (Desktop)`);
-            console.log(`[2] Código de Pareamento (Mobile)`);
-            const choice = await question('\nDigite sua opção (1 ou 2): ');
-            if (choice === '2') {
-                PAIR_PHONE = await question('Digite o número do WhatsApp (ex: 5511999998888): ');
-            }
-        }
-    }
-
-    // Detecção de Nuvem (Railway/Render)
-    const IS_CLOUD = process.env.RAILWAY_STATIC_URL || process.env.RENDER || process.env.PORT;
-    const CLOUD_URL = process.env.RAILWAY_STATIC_URL ? `https://${process.env.RAILWAY_STATIC_URL}` : null;
-
     console.log(`📍 Admin: ${ADMIN_EMAIL}`);
-    console.log(`🌍 Modo: ${IS_CLOUD ? 'Nuvem (Cloud)' : 'Local (Ngrok)'}`);
 
     while (true) {
         const license = await checkLicense();
+
         if (license === null) {
             await new Promise(r => setTimeout(r, 10000));
             continue;
@@ -195,22 +130,13 @@ async function run() {
             } else if (!isActive) {
                 console.log(`\n✅ Assinatura Ativa!`);
                 
-                let bridgeUrl = CLOUD_URL;
-
-                if (!IS_CLOUD) {
-                    await cleanupOldProcesses();
-                    bridgeUrl = await startNgrok();
-                } else {
-                    console.log('☁️ Ambientes de Nuvem detectado. Pulando Ngrok.');
-                    // Na nuvem, o index.js já roda na porta do processo, a URL é a da plataforma
-                }
+                const bridgeUrl = await startNgrok();
 
                 if (bridgeUrl) {
                     try {
-                        const bridgeKey = process.env.WA_BRIDGE_KEY || 'universal-secret-key';
-                        console.log(`📡 Atualizando Cloudflare com a URL: ${bridgeUrl}`);
+                        console.log('📡 Atualizando Cloudflare com a URL da Bridge...');
                         await axios.post(`${API_URL}/admin/bridge/update`, {
-                            key: bridgeKey,
+                            key: 'universal-secret-key',
                             url: bridgeUrl,
                             email: ADMIN_EMAIL
                         });
